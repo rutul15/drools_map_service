@@ -1,0 +1,116 @@
+import com.ctc.address.Building;
+import com.ctc.address.UserAddress;
+import com.ctc.address.Street;
+import com.ctc.address.StreetAlias;
+
+import java.util.Arrays;
+import org.apache.commons.lang.StringUtils;
+
+rule "Exact Building Match"
+when
+  $userAddress : UserAddress(resolvedAddress == null);
+  $building    : Building(displayAddress == $userAddress.getOriginalAddress());
+then
+  modify($userAddress) { setResolvedAddress($building.getDisplayAddress()) }
+end
+
+rule "Exact Street Match"
+when
+  $userAddress : UserAddress(resolvedAddress == null);
+  $street      : Street(name == $userAddress.getStreetPart());
+then  
+  modify($userAddress) { setResolvedAddress($userAddress.getNumberPart() + " " + $street.getName()); }
+end
+
+rule "Street Alias Match"
+when
+  $userAddress : UserAddress(resolvedAddress == null);
+  $streetAlias : StreetAlias(alias == $userAddress.getStreetPart());
+then  
+  modify($userAddress) { setResolvedAddress($userAddress.getNumberPart() + " " + $streetAlias.getName()); }
+end
+
+rule "Derive Street Name from Building"
+when
+	$building	: Building(streetName != null);
+	not(Street(name == $building.getStreetName()));
+then
+	Street $street = new Street($building.getStreetName().trim().toUpperCase());
+			
+	String[] tokens = $street.getName().split("[\\s\\.\\,]+");
+		
+	if(tokens.length >= 3) {
+		$street.setPrefixPart(tokens[0]);
+		$street.setSuffixPart(tokens[tokens.length-1]);
+		$street.setStemmedPart(StringUtils.join(Arrays.asList(tokens).subList(1, tokens.length-1), " "));
+		
+		if($street.getStemmedPart().equals("AVENUE") && $street.getSuffixPart().length() == 1) {
+			// special format for "Avenue X"
+			$street.setStemmedPart($street.getSuffixPart());
+			$street.setSuffixPart("AVENUE");
+			insert( new StreetAlias($street.getPrefixPart() + " " + $street.getStemmedPart() + " AVENUE", $street.getName()) );
+		}
+	}
+	insert( $street );
+end
+
+rule "Create an alias that drops the Suffix"
+when
+	$street		: Street();
+then
+	insert( new StreetAlias($street.getPrefixPart() + " " + $street.getStemmedPart(), $street.getName()) );
+end	
+
+rule "Create alias for Numbered Street Name e.g. dropping the TH in 8TH"
+when
+	$street	: Street(stemmedPart != null && Character.isDigit(getStemmedPart().charAt(0)));
+then
+	insert( new StreetAlias($street.getPrefixPart() + " " + $street.getStemmedPart().replaceAll("[^\\d].*",""), $street.getName()) );
+end	
+
+rule "Create an alias that collapses multi-token stem to a combined token e.g. LA SALLE to LASALLE"
+when
+	$street: Street(name.split(" ").length > 3);
+then
+	insert( new StreetAlias($street.getPrefixPart() + " " + $street.getStemmedPart().replaceAll(" ",""), $street.getName() ) );
+end
+	
+rule "Match a Wrong Suffix"
+when
+  $userAddress : UserAddress(resolvedAddress == null && tokens.size() >= 4);
+  $streetAlias : StreetAlias(alias == $userAddress.getStreetWithoutSuffix());
+then  
+  insert( new StreetAlias($userAddress.getStreetPart(), $streetAlias.getName()) );
+end
+
+rule "Hard-Coded Fixes"
+when 
+then
+	insert(new StreetAlias("NORTH RIVERWALK", "NORTH RIVERWALK STREET"));
+	insert(new StreetAlias("NORTH LAKE SHORE", "NORTH LAKE SHORE DRIVE")); // weird one, this should not be needed
+end
+
+rule "MLK Fix"
+when
+	$ua : UserAddress(numberPart > "10000" && numberPart < "12000" && tokens.contains("KING"));
+then
+	insert(new StreetAlias($ua.getStreetPart(), "SOUTH DOCTOR MARTIN LUTHER KING JUNIOR DRIVE"));
+end
+
+rule "Empty Address"
+when
+  $userAddress : UserAddress(originalAddress == "");
+then
+  //modify($userAddress) { setResolvedAddress("Unknown Address"); }
+  retract($userAddress);
+end
+
+rule "Matching Number with Unambiguous Token"
+when
+  $userAddress : UserAddress(resolvedAddress == null); 
+  $building : Building(numberPart == $userAddress.getNumberPart());
+  $street : Street(name == $building.getStreetName() && $userAddress.getTokens().contains($street.getStemmedPart()));  
+  not(Street(this != $street && name == $building.getStreetName() && $userAddress.getTokens().contains($street.getStemmedPart())));
+then
+  modify($userAddress) { setResolvedAddress($userAddress.getNumberPart() + " " + $building.getStreetName()) };
+end

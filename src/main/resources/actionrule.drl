@@ -1,0 +1,10 @@
+import com.rutul.drools.Message;
+import com.rutul.drools.Action;
+
+rule "Act on high value in message"
+when
+  message:Message (messageValue > 17)
+then
+  Action action = new Action();
+  action.performAction(message);
+end

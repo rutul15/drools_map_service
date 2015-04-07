@@ -1,0 +1,8 @@
+import com.rutul.drools.Message;
+
+rule "Hello World"
+when
+  message:Message (type == 'Hello')
+then
+  message.printMessage();
+end
