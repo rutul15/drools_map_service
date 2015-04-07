@@ -17,7 +17,7 @@ public class InitBean {
 		System.out.println("********** manager ************* "+ manager);
 		
 			try {
-				dao.readAll(manager.getWorkingMemory(), 1000);
+				dao.readAll(manager.getWorkingMemory(), Integer.MAX_VALUE);
 			} catch (SAXException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();

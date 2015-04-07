@@ -4,7 +4,7 @@ import com.ctc.address.Street;
 import com.ctc.address.StreetAlias;
 
 import java.util.Arrays;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 
 rule "Exact Building Match"
 when
